@@ -1,6 +1,5 @@
 package com.lounge.phone
 
-import android.app.AlertDialog
 import android.view.Gravity
 import android.view.View
 import android.widget.FrameLayout
@@ -135,8 +134,8 @@ class TonightPage(private val act: MainActivity) : Page {
         val a = Model.agreement(p)
         if (a != null) extra.addView(Ui.text(c, a.label, 12f, agreeColor(a), true))
         card.addView(extra)
-        if (fx.ref.isNotEmpty()) card.addView(Ui.text(c, "Referee: ${fx.ref}", 12f, Skin.MUTED).apply { setPadding(0, Ui.dp(c, 2), 0, 0) })
-        card.setOnClickListener { details(r) }
+        if (fx.ref.isNotEmpty()) card.addView(Ui.refLink(act, fx.ref, 12f, "Referee: ").apply { setPadding(0, Ui.dp(c, 2), 0, 0) })
+        card.setOnClickListener { act.openMatch(r.fv.league, r.fv.fx) }
         return card
     }
 
@@ -154,28 +153,8 @@ class TonightPage(private val act: MainActivity) : Page {
         mid.addView(Ui.text(c, "${fx.home} v ${fx.away}", 14f, Skin.TEXT, true))
         mid.addView(Ui.text(c, pickName(r.fv.pred, fx.home, fx.away), 12f, Skin.MUTED))
         row.addView(mid, LinearLayout.LayoutParams(0, -2, 1f))
-        row.setOnClickListener { details(r) }
+        row.setOnClickListener { act.openMatch(r.fv.league, r.fv.fx) }
         return row
-    }
-
-    /** Until the full match page is built (stage 3), a tap shows the numbers for the match in a box. */
-    private fun details(r: Row) {
-        val fx = r.fv.fx
-        val p = r.fv.pred
-        val sb = StringBuilder()
-        sb.append(Leagues.ALL.getValue(r.fv.league).name).append("\n")
-        sb.append(SimpleDateFormat("EEE d MMM, HH:mm", Locale.UK).format(Date(r.ko * 1000))).append("\n\n")
-        sb.append("${fx.home} win ${pct(p.home)}\nDraw ${pct(p.draw)}\n${fx.away} win ${pct(p.away)}\n\n")
-        sb.append("Likeliest score ${p.scoreH}-${p.scoreA} (${pct(p.scoreP)})\n")
-        sb.append("Both teams score ${pct(p.btts)}\nOver 2.5 goals ${pct(p.over25)}\n")
-        sb.append("Expected goals %.1f - %.1f\n".format(p.lh, p.la))
-        val tt = Model.tightText(p, fx.home, fx.away)
-        if (tt.isNotEmpty()) sb.append("\n").append(tt).append("\n")
-        val a = Model.agreement(p)
-        if (a != null) sb.append("\nModel v bookmakers: ").append(a.label).append("\n")
-        if (fx.ref.isNotEmpty()) sb.append("Referee: ").append(fx.ref).append("\n")
-        sb.append("\nThe full match page (players, form, head to head) arrives in Stage 3.")
-        AlertDialog.Builder(act).setTitle("${fx.home} v ${fx.away}").setMessage(sb.toString()).setPositiveButton("Close", null).show()
     }
 
     companion object { const val MAX_CARDS = 4 }

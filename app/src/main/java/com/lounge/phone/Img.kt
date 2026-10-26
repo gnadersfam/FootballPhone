@@ -50,6 +50,29 @@ object Img {
         }
     }
 
+    /** Like load, but tries each address in turn until one gives a picture (first the Premier League photo, then ESPN). */
+    fun loadAny(view: ImageView, urls: List<String>, maxW: Int, maxH: Int) {
+        val list = urls.filter { it.startsWith("http://") || it.startsWith("https://") }
+        val key = list.firstOrNull() ?: ""
+        view.tag = key
+        if (list.isEmpty()) { view.setImageDrawable(null); return }
+        for (u in list) { val hit = cache.get(u); if (hit != null) { view.setImageBitmap(hit); return } }
+        view.setImageDrawable(null)
+        pool.execute {
+            var bmp: Bitmap? = null
+            for (u in list) {
+                if (synchronized(failed) { u in failed }) continue
+                val b = try { fetch(u, maxW, maxH) } catch (e: Throwable) { null }
+                if (b != null) { cache.put(u, b); bmp = b; break } else synchronized(failed) { failed.add(u) }
+            }
+            if (bmp != null) {
+                if (loads.incrementAndGet() % 40 == 0) System.gc()
+                val got = bmp
+                Bg.ui { if (view.tag == key) view.setImageBitmap(got) }
+            }
+        }
+    }
+
     private fun fetch(url: String, maxW: Int, maxH: Int): Bitmap? {
         val data = Net.bytes(url, timeoutMs = 15000)
         if (data.size > 6_000_000) return null

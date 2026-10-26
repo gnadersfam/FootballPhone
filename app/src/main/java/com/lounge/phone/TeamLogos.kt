@@ -9,6 +9,7 @@ import android.content.Context
 object TeamLogos {
     private var map: Map<String, String> = emptyMap()
     private var names: TeamNames? = null
+    private var normMap: Map<String, String> = emptyMap()
     private var started = false
     private const val WEEK = 7 * 86400L
 
@@ -40,6 +41,7 @@ object TeamLogos {
     private fun install(m: Map<String, String>) {
         map = m
         names = TeamNames(m.keys)
+        normMap = m.keys.associateBy { TeamNames.norm(it) }
     }
 
     private fun download(): Map<String, String> {
@@ -66,9 +68,15 @@ object TeamLogos {
         val m = map
         if (m.isEmpty()) return ""
         m[team]?.let { return it }
-        val canon = names?.canon(team) ?: return ""
-        return m[canon] ?: ""
+        val canon = names?.canon(team)
+        if (canon != null) return m[canon] ?: ""
+        // "Stoke" -> "Stoke City": a name that is the unique start of a badge name (same rule as the PC app)
+        val n = TeamNames.norm(team)
+        val starts = normMap.filter { it.key.startsWith("$n ") }.values
+        return if (starts.size == 1) (m[starts.first()] ?: "") else ""
     }
+
+    fun count(): Int = map.size
 
     fun faceUrl(playerId: String): String =
         if (playerId.isBlank() || !playerId.all { it.isDigit() }) "" else "https://a.espncdn.com/i/headshots/soccer/players/full/$playerId.png"

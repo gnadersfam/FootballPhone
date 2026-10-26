@@ -26,6 +26,38 @@ object Football {
     var onChange: ((Boolean) -> Unit)? = null
 
     private var dataLoaded = false
+    @Volatile var lsMessage = ""
+
+    /** Downloads last season's player figures in the background when they are missing (see LastSeason). */
+    fun startLastSeason(c: Context) {
+        val st = state ?: return
+        LastSeason.start(c, st.prev, { m -> lsMessage = m; tell(true) }, { lsMessage = ""; tell(false) })
+    }
+
+    /** Rebuilds the numbers from what is saved (after one match was refreshed). Call on a background thread. */
+    fun rebuild() {
+        val st = state ?: return
+        engine = newEngine(st)
+    }
+
+    /** Quick look at one upcoming match (team sheets, referee, odds). [done] runs on the screen thread with a short sentence. */
+    fun refreshMatch(lk: String, fx: Fixture, done: (String) -> Unit) {
+        val st = state ?: return
+        Bg.run {
+            var text: String
+            try {
+                val got = Refresh.fetchMatch(lk, fx, st)
+                val msg = Refresh.applyMatch(st, lk, fx, got)
+                val warn = if (got.warnings.isNotEmpty()) " (" + got.warnings.first() + ")" else ""
+                engine = newEngine(st)
+                text = "This match: $msg$warn"
+            } catch (e: Throwable) {
+                Crash.log("Refresh match", e)
+                text = "Could not refresh this match: ${e.message}"
+            }
+            Bg.ui { done(text); onChange?.invoke(false) }
+        }
+    }
 
     fun init(c: Context) {
         if (io != null) return
@@ -35,6 +67,7 @@ object Football {
     }
 
     fun persist(): Persist = io ?: throw IllegalStateException("football not started")
+    fun picks(): Picks = Picks(persist())
 
     private fun newEngine(st: FootState): Engine {
         val c = Calendar.getInstance()
@@ -63,7 +96,8 @@ object Football {
             loading = false
             status = ""
             tell(false)
-            if (thenRefresh) refresh(c, true)
+            LastSeason.warm(c)
+            if (thenRefresh) refresh(c, true) else startLastSeason(c)
         }
     }
 
@@ -111,6 +145,7 @@ object Football {
                 else -> "Updated, with ${extra.size} warning${if (extra.size == 1) "" else "s"}: ${extra.first()}"
             }
             tell(false)
+            startLastSeason(c)
         }
     }
 

@@ -80,6 +80,30 @@ class SettingsPage(private val act: MainActivity) : Page {
         val t = if (u.isEmpty()) null else Utc.parse(u)
         col.addView(Ui.note(c, if (t == null) "Never updated" else "Last updated " + SimpleDateFormat("EEE d MMM, HH:mm", Locale.UK).format(java.util.Date(t * 1000)), Skin.TEXT))
 
+        val ls = Football.state?.let { LastSeason.status(c, it.prev) }
+        if (ls != null && ls.second > 0)
+            col.addView(Ui.note(c, if (ls.first >= ls.second) "Last season's player stats: ready" else "Last season's player stats: downloading in the background (${ls.first} of ${ls.second} match days)"))
+
+        col.addView(Ui.h2(c, "Scoreboard ticker"))
+        col.addView(Ui.note(c, "The moving line under the search box with the next matches and the model's chances."))
+        val tickerOn = Store.bool(c, "ticker", true)
+        col.addView(Ui.chips(c,
+            Triple("On", tickerOn) { Store.putBool(c, "ticker", true); act.tickerChanged(); refresh() },
+            Triple("Off", !tickerOn) { Store.putBool(c, "ticker", false); act.tickerChanged(); refresh() }))
+
+        col.addView(Ui.h2(c, "Settings file (PC and phone)"))
+        col.addView(Ui.note(c, "Moves your picks and watch-list between the PC app and this phone in one small file. It never contains your key."))
+        val fileMsg = Ui.note(c, "", Skin.TEXT)
+        val fb = LinearLayout(c)
+        fb.addView(Ui.button(c, "Load from file") { act.loadSettingsFile { m -> fileMsg.text = m } })
+        fb.addView(Ui.button(c, "Save to file") { act.saveSettingsFile { m -> fileMsg.text = m } }, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = Ui.dp(c, 8) })
+        col.addView(fb)
+        col.addView(fileMsg)
+
+        col.addView(Ui.h2(c, "Check my setup"))
+        col.addView(Ui.note(c, "See whether every source is fresh and working, and test each website."))
+        col.addView(Ui.button(c, "Check my setup") { act.openSetup() })
+
         col.addView(Ui.h2(c, "How it works"))
         col.addView(Ui.note(c,
             "  - Results, xG, shots, fouls, cards and referees: football-data.co.uk\n" +

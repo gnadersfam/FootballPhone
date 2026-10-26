@@ -37,6 +37,7 @@ class Engine(val state: FootState, year: Int, month: Int) {
     val pri: Map<String, Rates>
     val league = LinkedHashMap<String, LeagueData>()
     val refs: RefStats
+    val refsTabs: Map<String, RefStats>
 
     init {
         val startYear = if (month >= 7) year else year - 1
@@ -57,6 +58,9 @@ class Engine(val state: FootState, year: Int, month: Int) {
             league[lk] = LeagueData(ms, prior, Model.buildRatings(ms, prior), Model.teamFactors(ms), Model.leagueTable(ms))
         }
         refs = Model.refereeStats(all)
+        val prevCut = "%d-07-01".format(startYear - 1)
+        refsTabs = mapOf("both" to refs, "this" to Model.refereeStats(all.filter { it.date >= cutoff }),
+            "last" to Model.refereeStats(all.filter { it.date >= prevCut && it.date < cutoff }))
     }
 
     fun fixtures(lk: String): List<FixtureView> =

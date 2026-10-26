@@ -14,7 +14,7 @@ class Theme(
 object Skin {
     private fun c(hex: String) = Color.parseColor(hex)
 
-    private fun mix(a: Int, b: Int, t: Float): Int = Color.rgb(
+    fun mix(a: Int, b: Int, t: Float): Int = Color.rgb(
         Math.round(Color.red(a) + (Color.red(b) - Color.red(a)) * t),
         Math.round(Color.green(a) + (Color.green(b) - Color.green(a)) * t),
         Math.round(Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t))
@@ -71,4 +71,24 @@ object Skin {
     fun apply(key: String) {
         t = THEMES.firstOrNull { it.key == key } ?: THEMES[0]
     }
+
+    /** (text colour, cell colour) for a green (good) or red cell; strength 0..1. Same maths as the PC app. Null on the plain Classic theme. */
+    fun pill(good: Boolean, strength: Double): IntArray? {
+        if (t.key == "classic") return null
+        val col = if (good) GREEN else RED
+        val k = 0.20f + 0.22f * Math.max(0.0, Math.min(1.0, strength)).toFloat()
+        return intArrayOf(col, mix(PANEL2, col, k))
+    }
+
+    /** Colour a number against the average of its column: green if clearly above, red if clearly below. */
+    fun relPill(v: Double, mean: Double, band: Double = 0.08, strong: Double = 0.5): IntArray? {
+        if (mean == 0.0) return null
+        val d = v / mean - 1.0
+        if (Math.abs(d) < band) return null
+        return pill(d > 0, (Math.abs(d) - band) / strong)
+    }
+
+    fun dayDate(ko: Long): String = java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.UK).format(java.util.Date(ko * 1000))
+    fun hhmm(ko: Long): String = java.text.SimpleDateFormat("HH:mm", java.util.Locale.UK).format(java.util.Date(ko * 1000))
+    fun dayTime(ko: Long): String = java.text.SimpleDateFormat("EEE d MMM HH:mm", java.util.Locale.UK).format(java.util.Date(ko * 1000))
 }

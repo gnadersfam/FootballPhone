@@ -64,4 +64,26 @@ object Crest {
         }
         return f
     }
+
+    /** A round player photo (Premier League photo first, then ESPN); initials in the club colour until it arrives or when there is none. */
+    fun face(c: Context, name: String, id: String, team: String, sizeDp: Int): View {
+        val f = FrameLayout(c)
+        f.addView(TextView(c).apply {
+            text = initials(name)
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeDp * 0.36f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(colour(team)) }
+        }, FrameLayout.LayoutParams(-1, -1))
+        val iv = ImageView(c).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0x00000000) }
+            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+            clipToOutline = true
+        }
+        f.addView(iv, FrameLayout.LayoutParams(-1, -1))
+        Img.loadAny(iv, Faces.urls(id, name, team), 160, 160)
+        return f
+    }
 }

@@ -62,6 +62,45 @@ object Ui {
         }
 
     fun center(): Int = Gravity.CENTER_VERTICAL
+
+    /** One chip (a small rounded button that is filled when it is the chosen one). */
+    fun chip(c: Context, label: String, on: Boolean, onClick: () -> Unit): TextView =
+        TextView(c).apply {
+            text = label
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            setTypeface(typeface, if (on) Typeface.BOLD else Typeface.NORMAL)
+            setTextColor(if (on) (if (Skin.t.dark) 0xFF0A0614.toInt() else 0xFFFFFFFF.toInt()) else Skin.TEXT)
+            background = if (on) box(c, Skin.ACCENT, Skin.ACCENT, 18) else box(c, Skin.PANEL2, Skin.LINE, 18)
+            setPadding(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8))
+            gravity = Gravity.CENTER
+            setOnClickListener { onClick() }
+        }
+
+    /** A row of chips that scrolls sideways when it is wider than the screen. */
+    fun chips(c: Context, vararg items: Triple<String, Boolean, () -> Unit>): View {
+        val sv = android.widget.HorizontalScrollView(c)
+        sv.isHorizontalScrollBarEnabled = false
+        val row = LinearLayout(c)
+        row.orientation = LinearLayout.HORIZONTAL
+        row.setPadding(0, dp(c, 4), 0, dp(c, 4))
+        for ((label, on, act) in items)
+            row.addView(chip(c, label, on, act), LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(c, 8) })
+        sv.addView(row, android.widget.FrameLayout.LayoutParams(-2, -2))
+        return sv
+    }
+
+    /** A referee's name that opens that referee's card when tapped. */
+    fun refLink(act: MainActivity, name: String, sp: Float = 13f, prefix: String = ""): TextView =
+        text(act, prefix + name, sp, Skin.ACCENT, true).apply {
+            paintFlags = paintFlags or android.graphics.Paint.UNDERLINE_TEXT_FLAG
+            if (name.isNotEmpty() && !name.equals("TBC", true)) setOnClickListener { act.openReferee(name) }
+        }
+
+    fun pct(p: Double) = "%d%%".format(Math.round(p * 100).toInt())
+    fun sign(v: Double, d: Int = 1) = (if (v > 0) "+" else "") + "%.${d}f".format(v)
+    fun odds(o: DoubleArray?): String = o?.joinToString(" / ") { "%.2f".format(it) } ?: ""
+    fun resColor(r: String) = when (r) { "W" -> Skin.GREEN; "D" -> Skin.AMBER; else -> Skin.RED }
+    fun agreeColor(a: Agreement?) = when (a?.code) { "agree" -> Skin.GREEN; "disagree" -> Skin.RED; null -> Skin.MUTED; else -> Skin.AMBER }
 }
 
 /** The three result chances (home, draw, away) as one coloured bar. */

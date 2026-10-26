@@ -140,6 +140,53 @@ object Refresh {
         } catch (e: Throwable) { return emptyList() }
     }
 
+    const val PL_API = "https://sdp-prem-prod.premier-league-prod.pulselive.com/api"
+    const val PL_REF_DAYS = 10
+    private val PL_HEADERS = mapOf("Origin" to "https://www.premierleague.com", "Referer" to "https://www.premierleague.com/")
+
+    /** The Premier League publishes each match's referee about four days ahead, before the other sources do. For upcoming Premier
+     *  League matches without a referee, ask its feed and fill the name in (only blanks; nothing else is touched). If the feed is
+     *  down the refresh carries on as before. Same as the PC app. */
+    private fun plReferees(state: FootState, tn: TeamNames, warnings: MutableList<String>, now: Long, ymd: Triple<Int, Int, Int>): Int {
+        try {
+            val today = Utc.day(now)
+            val limit = Utc.day(now + PL_REF_DAYS * 86400L)
+            val need = (state.fixtures["PL"] ?: emptyList<Fixture>()).filter {
+                it.ref.isEmpty() && it.matchday != null && it.utc.substring(0, 10) >= today && it.utc.substring(0, 10) <= limit
+            }
+            if (need.isEmpty()) return 0
+            val seasonId = 2000 + Leagues.seasonCode(ymd.first, ymd.second).substring(0, 2).toInt()
+            var found = 0
+            for (md in need.mapNotNull { it.matchday }.toSortedSet()) {
+                val week = Net.json("$PL_API/v1/competitions/8/seasons/$seasonId/matchweeks/$md/matches", PL_HEADERS).obj()
+                val ids = HashMap<Pair<String, String>, String>()
+                for (m in week["data"].arr()) {
+                    val mo = m.obj()
+                    val ht = mo["homeTeam"].obj(); val at = mo["awayTeam"].obj()
+                    val h = tn.canon(ht["name"].str()) ?: tn.canon(ht["shortName"].str())
+                    val a = tn.canon(at["name"].str()) ?: tn.canon(at["shortName"].str())
+                    if (h != null && a != null) ids[h to a] = mo["matchId"].str()
+                }
+                for (f in need) {
+                    if (f.matchday != md) continue
+                    val mid = ids[f.home to f.away] ?: continue
+                    val off = Net.json("$PL_API/v1/matches/$mid/officials", PL_HEADERS).obj()
+                    for (o in off["matchOfficials"].arr()) {
+                        val ob = o.obj()
+                        val name = ob["official"].obj()["name"].str()
+                        if (ob["type"].str() == "Referee" && name.isNotEmpty()) { f.ref = name; found++; break }
+                    }
+                }
+            }
+            return found
+        } catch (e: java.io.IOException) {
+            warnings.add("Referees from the Premier League site: ${e.message}")
+        } catch (e: Throwable) {
+            // carry on as before
+        }
+        return 0
+    }
+
     /** Runs a full refresh. Returns warnings (plain sentences). */
     fun refresh(state: FootState, token: String, progress: (String, Double) -> Unit = { _, _ -> },
                 dl: Downloads = Downloads(), now: Long = System.currentTimeMillis() / 1000, todayYmd: Triple<Int, Int, Int> = today()): List<String> {
@@ -203,6 +250,8 @@ object Refresh {
             }
             if (out.isNotEmpty() || token.isNotEmpty()) state.fixtures[lk] = out
         }
+        progress("Checking referees on the Premier League site", 0.18)
+        plReferees(state, tns.getValue("PL"), warnings, now, todayYmd)
         state.saveFixtures()
         for (lk in Leagues.ORDER) logOdds(state, lk, state.fixtures[lk] ?: emptyList(), now)
 

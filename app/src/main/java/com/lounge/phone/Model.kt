@@ -73,7 +73,13 @@ const val S_SHOTS = 2
 const val S_SOT = 3
 const val S_YC = 4
 
-class RoleTot { var apps = 0; val s = IntArray(5) }
+/** apps / s are this season's real counts. xApps / xS are last season's games added at half weight (only in the copy used for the player percentages). */
+class RoleTot {
+    var apps = 0; val s = IntArray(5)
+    var xApps = 0.0; val xS = DoubleArray(5)
+    val wApps: Double get() = apps + xApps
+    fun w(i: Int): Double = s[i] + xS[i]
+}
 class Agg(val id: String, var name: String, var team: String) {
     val posCounts = LinkedHashMap<String, Int>()
     val start = RoleTot()
@@ -81,6 +87,8 @@ class Agg(val id: String, var name: String, var team: String) {
     var rc = 0
     var pos = ""
     var group = ""
+    /** His true number of sub appearances this season (set on the blended copy; -1 = not blended). 'Chance of coming on' uses it. */
+    var realSub = -1
     fun role(r: String) = if (r == "start") start else sub
 }
 class Rates(val v: DoubleArray, var apps: Double)
@@ -565,15 +573,55 @@ object Model {
             val role = if (ri == 0) "start" else "sub"
             val p = priorFor(pri, a?.group?.ifEmpty { group } ?: group, role)
             val rec = a?.role(role)
-            val n = rec?.apps ?: 0
-            val v = DoubleArray(5) { i -> ((rec?.s?.get(i) ?: 0) + k * p.v[i]) / (n + k) }
-            Rates(v, n.toDouble())
+            val n = rec?.wApps ?: 0.0
+            val v = DoubleArray(5) { i -> ((rec?.w(i) ?: 0.0) + k * p.v[i]) / (n + k) }
+            Rates(v, n)
         }
     }
 
     fun probOn(a: Agg?, teamN: Int): Double {
-        val subs = a?.sub?.apps ?: 0
+        val subs = if (a == null) 0 else if (a.realSub >= 0) a.realSub else a.sub.apps
         return clip((subs + 0.6) / (teamN + 2.0), 0.05, 0.85)
+    }
+
+    /** Same as the PC app's model.LAST_SEASON_WEIGHT: how much a game from last season counts against a game this season. 0 = off. */
+    const val LAST_SEASON_WEIGHT = 0.5
+
+    /**
+     * Same as the PC app's model.blend_last_season: a copy of this season's player records with last season's games added at weight [w].
+     * Players seen only last season get a record too. The originals are not changed.
+     */
+    fun blendLastSeason(players: Map<String, Agg>, prev: Map<String, LastSeason.Rec>, w: Double = LAST_SEASON_WEIGHT): Map<String, Agg> {
+        if (w == 0.0 || prev.isEmpty()) return players
+        val out = LinkedHashMap<String, Agg>()
+        for ((pid, a) in players) {
+            val b = Agg(a.id, a.name, a.team)
+            b.posCounts.putAll(a.posCounts); b.rc = a.rc; b.pos = a.pos; b.group = a.group
+            for (role in listOf("start", "sub")) {
+                val src = a.role(role); val dst = b.role(role)
+                dst.apps = src.apps; for (i in 0 until 5) dst.s[i] = src.s[i]
+            }
+            b.realSub = a.sub.apps
+            out[pid] = b
+        }
+        for ((pid, p) in prev) {
+            var a = out[pid]
+            if (a == null) {
+                val pos = p.posCounts.maxByOrNull { it.value }?.key ?: ""
+                a = Agg(pid, p.name, p.team)
+                a.pos = pos; a.group = posGroup(pos); a.realSub = 0
+                out[pid] = a
+            } else if (a.pos.isEmpty() && p.posCounts.isNotEmpty()) {
+                a.pos = p.posCounts.maxByOrNull { it.value }!!.key
+                a.group = posGroup(a.pos)
+            }
+            for (role in listOf("start", "sub")) {
+                val dst = a.role(role); val src = if (role == "start") p.start else p.sub
+                dst.xApps += w * src.apps
+                for (i in 0 until 5) dst.xS[i] += w * src.s[i]
+            }
+        }
+        return out
     }
 
     fun teamForm(history: List<List<PlayerLine>>, half: Double = FORM_HALF_LIFE): Map<String, FormEntry> {
@@ -721,9 +769,9 @@ object Model {
                     // his position's cards-per-foul), each pulled toward the position average
                     val pp = priorFor(pri, a?.group?.ifEmpty { group } ?: group, role)
                     val rec = a?.role(role)
-                    val n = rec?.apps ?: 0
-                    val ycR = ((rec?.s?.get(S_YC) ?: 0) + K_BOOK * pp.v[S_YC]) / (n + K_BOOK)
-                    val fR = ((rec?.s?.get(S_FOULS) ?: 0) + K_BOOK * pp.v[S_FOULS]) / (n + K_BOOK)
+                    val n = rec?.wApps ?: 0.0
+                    val ycR = ((rec?.w(S_YC) ?: 0.0) + K_BOOK * pp.v[S_YC]) / (n + K_BOOK)
+                    val fR = ((rec?.w(S_FOULS) ?: 0.0) + K_BOOK * pp.v[S_FOULS]) / (n + K_BOOK)
                     val cpf = if (pp.v[S_FOULS] > 0) pp.v[S_YC] / pp.v[S_FOULS] else 1.0
                     val bookRate = (1 - W_BOOK) * ycR + W_BOOK * fR * cpf
                     val lYc = bookRate * fBook * mFouls * scale

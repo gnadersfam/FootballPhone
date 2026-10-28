@@ -31,8 +31,16 @@ object Football {
     /** Downloads last season's player figures in the background when they are missing (see LastSeason). */
     fun startLastSeason(c: Context) {
         val st = state ?: return
-        LastSeason.start(c, st.prev, { m -> lsMessage = m; tell(true) }, { lsMessage = ""; tell(false) })
+        appCtx = c.applicationContext
+        // when the download finishes, rebuild the numbers so the player percentages use the new last-season figures (as on the PC app)
+        LastSeason.start(c, st.prev, { m -> lsMessage = m; tell(true) }, {
+            lsMessage = ""
+            try { if (!refreshing) engine = newEngine(st) } catch (e: Throwable) { Crash.log("Rebuild after last season", e) }
+            tell(false)
+        })
     }
+
+    private var appCtx: Context? = null
 
     /** Rebuilds the numbers from what is saved (after one match was refreshed). Call on a background thread. */
     fun rebuild() {
@@ -62,6 +70,7 @@ object Football {
     fun init(c: Context) {
         if (io != null) return
         val p = AndroidPersist(c.applicationContext)
+        appCtx = c.applicationContext
         io = p
         state = FootState(p)
     }
@@ -71,7 +80,8 @@ object Football {
 
     private fun newEngine(st: FootState): Engine {
         val c = Calendar.getInstance()
-        return Engine(st, c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1)
+        val recs = try { appCtx?.let { LastSeason.records(it) } ?: emptyMap() } catch (e: Throwable) { Crash.log("Last season records", e); emptyMap() }
+        return Engine(st, c.get(Calendar.YEAR), c.get(Calendar.MONTH) + 1, recs)
     }
 
     private fun tell(progressOnly: Boolean) { Bg.ui { onChange?.invoke(progressOnly) } }

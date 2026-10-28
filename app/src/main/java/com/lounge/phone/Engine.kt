@@ -27,10 +27,12 @@ class TrendRow(val opp: String, val venue: String, val score: String, val xg: Do
 class Trend(val rows: List<TrendRow>, val avgF: Double?, val avgA: Double?, val verdict: String)
 
 /** Turns saved data into things the screens can show. */
-class Engine(val state: FootState, year: Int, month: Int) {
+class Engine(val state: FootState, year: Int, month: Int, val lastSeasonRecs: Map<String, LastSeason.Rec> = emptyMap()) {
     val eventsCur: List<Event>
     val cards: Map<String, CardAnalysis>
     val players: Map<String, Agg>
+    /** This season's records with last season's games blended in (Model.LAST_SEASON_WEIGHT). Only the player percentages use it; `players` stays this season only. */
+    val playersPred: Map<String, Agg>
     val teamMatches: Map<String, Int>
     val lastEvent: Map<String, LastEvent>
     val teamHist: Map<String, List<List<PlayerLine>>>
@@ -47,6 +49,7 @@ class Engine(val state: FootState, year: Int, month: Int) {
         val ag = Model.aggregatePlayers(eventsCur)
         players = ag.players; teamMatches = ag.teamMatches; lastEvent = ag.lastEvent; teamHist = ag.teamHist
         pri = Model.groupPriors(players)
+        playersPred = try { Model.blendLastSeason(players, lastSeasonRecs) } catch (e: Throwable) { Crash.log("Last season blend", e); players }
         val all = ArrayList<Match>()
         for (lk in Leagues.ORDER) {
             val ms = state.results[lk] ?: emptyList()
@@ -103,7 +106,7 @@ class Engine(val state: FootState, year: Int, month: Int) {
         val lineup = lineup(lk, fx)
         val refName = fx.ref
         val ref = if (refName.isNotEmpty()) refs.refs[Model.refKey(refName)] else null
-        val ctx = Ctx(lg.ratings, lg.tf, players, pri, teamMatches, ref?.factor ?: 1.0)
+        val ctx = Ctx(lg.ratings, lg.tf, playersPred, pri, teamMatches, ref?.factor ?: 1.0)
         var rows: List<PRow> = emptyList()
         if (lineup.home.starters.isNotEmpty() && lineup.away.starters.isNotEmpty())
             rows = Model.predictPlayers(fx.home, fx.away, lineup, ctx)

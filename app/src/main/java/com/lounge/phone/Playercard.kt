@@ -32,7 +32,7 @@ class PcSummary(val figures: List<PcFigure>, val bands: List<PcBand>)
 
 object Playercard {
     const val NAME = "f_playercard"
-    const val PLAYER_VERSION = 2
+    const val PLAYER_VERSION = 3
     const val LIVE_DAYS = 7
     val FIELDS = listOf("booked", "f1", "f2", "f3", "d1", "d2", "d3", "s1", "s2", "s3", "t1", "t2")
     class Market(val label: String, val field: String, val stat: Int, val k: Int)
@@ -115,6 +115,7 @@ object Playercard {
         for (e in events) if (!recs.containsKey(Scorecard.recKey(e.league, e.date, e.home, e.away))) todo.getOrPut(e.date) { ArrayList() }.add(e)
         if (todo.isNotEmpty()) {
             val prevAll = Leagues.ORDER.flatMap { eng.state.prev[it] ?: emptyList() }
+            val prevRec = eng.lastSeasonRecs
             for ((d, list) in todo) {
                 val before = events.filter { it.date < d }
                 val ag = Model.aggregatePlayers(before)
@@ -122,6 +123,7 @@ object Playercard {
                 val form = ag.teamHist.mapValues { Model.teamForm(it.value) }
                 val resultsBefore = Leagues.ORDER.associateWith { lk -> eng.league.getValue(lk).matches.filter { it.date < d } }
                 val refs = Model.refereeStats(prevAll + resultsBefore.values.flatten())
+                val blended = Model.blendLastSeason(ag.players, prevRec)   // same as the PC app: last season's games added at half weight
                 for (e in list) {
                     val lk = e.league
                     val ms = resultsBefore.getValue(lk)
@@ -131,7 +133,7 @@ object Playercard {
                     val ratings = Model.buildRatings(ms, prior)
                     val refName = eng.league.getValue(lk).matches.firstOrNull { it.date == d && it.home == e.home && it.away == e.away }?.ref ?: ""
                     val ref = if (refName.isNotEmpty()) refs.refs[Model.refKey(refName)] else null
-                    val ctx = Ctx(ratings, Model.teamFactors(ms), ag.players, pri, ag.teamMatches, ref?.factor ?: 1.0)
+                    val ctx = Ctx(ratings, Model.teamFactors(ms), blended, pri, ag.teamMatches, ref?.factor ?: 1.0)
                     val rows = Model.predictPlayers(e.home, e.away, replayLineup(e, form), ctx)
                     val rec = make(lk, d, e.home, e.away, rows, "replay", true)
                     rec.res = result(e)

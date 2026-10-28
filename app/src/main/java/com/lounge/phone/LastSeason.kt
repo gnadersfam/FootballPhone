@@ -176,6 +176,40 @@ object LastSeason {
         return problems
     }
 
+    /** One player's last-season totals in the same shape as this season's records (start / sub apps and totals). */
+    class Rec(val id: String, val name: String) {
+        val teams = HashMap<String, Int>()
+        val posCounts = LinkedHashMap<String, Int>()
+        val start = RoleTot()
+        val sub = RoleTot()
+        var team = ""
+    }
+
+    private var recs: Map<String, Rec>? = null
+    private var recsKey = -1
+
+    /** Same as the PC app's lastseason.records(): used to blend last season into the player percentages (Model.blendLastSeason). Empty until some is downloaded. */
+    @Synchronized
+    fun records(c: Context): Map<String, Rec> {
+        val d = load(c)
+        val key = d.events.size
+        recs?.let { if (recsKey == key) return it }
+        val out = LinkedHashMap<String, Rec>()
+        for (ev in d.events.values) {
+            for ((team, list) in listOf(ev.h to ev.hp, ev.a to ev.ap)) for (r in list) {
+                val a = out.getOrPut(r.id) { Rec(r.id, d.names[r.id] ?: "?") }
+                a.teams[team] = (a.teams[team] ?: 0) + 1
+                val t = if (r.st != 0) a.start else a.sub
+                t.apps++
+                t.s[S_FOULS] += r.fo; t.s[S_FOULED] += r.fd; t.s[S_SHOTS] += r.sh; t.s[S_SOT] += r.so; t.s[S_YC] += r.yc
+                if (r.st != 0 && r.pos.isNotEmpty()) a.posCounts[r.pos] = (a.posCounts[r.pos] ?: 0) + 1
+            }
+        }
+        for (a in out.values) a.team = a.teams.maxByOrNull { it.value }?.key ?: ""
+        recs = out; recsKey = key
+        return out
+    }
+
     /** player id -> last season's figures: apps, yellows, main club and per game averages (yellows, fouls, fouled, shots, on target). */
     @Synchronized
     fun players(c: Context): Map<String, LsPlayer> {

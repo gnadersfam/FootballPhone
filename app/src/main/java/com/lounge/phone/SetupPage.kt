@@ -56,6 +56,18 @@ class SetupPage(act: MainActivity) : ScrollPage(act) {
             done >= total -> Line(Skin.GREEN, "Last season's player stats", "Ready ($total match days).")
             else -> Line(Skin.AMBER, "Last season's player stats", "Downloading in the background: $done of $total match days. It carries on by itself.")
         })
+        run {
+            val e = Football.engine
+            val onDisk = try { LastSeason.records(act).size } catch (x: Throwable) { -1 }
+            if (e == null) out.add(Line(Skin.AMBER, "Last-season blend", "The numbers are not built yet."))
+            else {
+                val used = e.lastSeasonRecs.size
+                val blended = e.playersPred.values.count { it.start.xApps + it.sub.xApps > 0.0 }
+                val withBlend = e.playersPred !== e.players
+                out.add(Line(if (withBlend && blended > 0) Skin.GREEN else Skin.RED, "Last-season blend",
+                    (if (withBlend && blended > 0) "ON" else "OFF") + ". Last-season players saved on the phone: $onDisk. Used by the current numbers: $used. This season's players with last season added: $blended of ${e.players.size}."))
+            }
+        }
         out.add(if (TeamLogos.count() > 0) Line(Skin.GREEN, "Club badges", "${TeamLogos.count()} clubs known.") else Line(Skin.AMBER, "Club badges", "The badge list has not downloaded yet (needs the internet). Initials show until it does."))
         out.add(if (Faces.ready()) Line(Skin.GREEN, "Player photos", "Premier League photo list ready (${Faces.count()} players); ESPN photos are the back-up.") else Line(Skin.AMBER, "Player photos", "The Premier League photo list is not loaded yet; ESPN photos are used meanwhile."))
         val w = st.meta["warnings"].arr().map { it.str() }.filter { !it.startsWith("No football-data.org key") }
